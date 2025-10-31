@@ -92,6 +92,8 @@ def random_search(func_str, bounds, max_iter=1000):
 
 def gradient_descent(func_str, x0, alpha=0.1, epsilon=1e-6, max_iter=1000):
     """
+    Мы спускаемся по вектору функции на шажок вниз, вопреки подъему градиента. 
+    Если все норм, становимся на эту ступеньку и еще вниз шагаем.
 
     Статус: 
     """
@@ -103,14 +105,31 @@ def gradient_descent(func_str, x0, alpha=0.1, epsilon=1e-6, max_iter=1000):
     # Градиент для каждой х
     grad_expr = [expr.diff(var) for var in vars]
     grad_funcs = [lambdify(vars, g, modules='numpy') for g in grad_expr]
+    grad_direction = None # заглушка направления градиента
     
     x = np.array(x0, dtype=float)
     
     for i in range(max_iter):
         grad_val = np.array([g(*x) for g in grad_funcs])
+
+        # Уменьшение шага, если градиент сменил направление
+        # Это нужно, чтобы метод не проскочил минимум
+        if i == 0:
+            grad_direction = grad_val > 0
+        else:
+            new_grad_direction = grad_val > 0
+            if (new_grad_direction.all() != grad_direction.all()):
+                print(f"(+-) Градиент сменил направление! alpha={alpha}->{alpha / 2}")
+                alpha /= 2 
+            grad_direction = new_grad_direction
+
+        print(f"градиент {grad_val} при х={x}")
         x_new = x - alpha * grad_val
+        
+        print(f"норма разности х и х_new: {np.linalg.norm(x_new - x)}, меньше эпсилона? - {np.linalg.norm(x_new - x) < epsilon}")
 
         if np.linalg.norm(x_new - x) < epsilon:
+            print(f"Всего итераций: {i}")
             break
         x = x_new
     
@@ -125,11 +144,11 @@ def gradient_descent(func_str, x0, alpha=0.1, epsilon=1e-6, max_iter=1000):
 #     print(f"Найден минимум в: {result}")
 #     print(f"Значение функции: {f_val:.6f}")
 
-# # === Случайный поиск (это все временно, потом будет нормальный консоль-запускатор)
+# === Случайный поиск (это все временно, потом будет нормальный консоль-запускатор)
 # if __name__ == "__main__":
-#     func = "(x1-2)**2 + (x2-3)**2"  # минимум: (2,3)
+#     func = "(x1)**2 + (x2)**2 + x1*x2"  # минимум: (2,3)
 #     bounds = [(-10, 10), (-10, 10)]
-#     result, f_val = random_search(func, bounds, max_iter=10000)
+#     result, f_val = random_search(func, bounds, max_iter=20000)
 #     print(f"Найден минимум в: {result}")
 #     print(f"Значение функции: {f_val:.6f}")
 
@@ -137,6 +156,6 @@ def gradient_descent(func_str, x0, alpha=0.1, epsilon=1e-6, max_iter=1000):
 if __name__ == "__main__":
     func = "(x1-2)**2 + (x2-3)**2"  # минимум в (2,3)
     x0 = [0.0, 0.0]
-    result, f_val = gradient_descent(func, x0, alpha=0.1)
+    result, f_val = gradient_descent(func, x0, alpha=0.6)
     print(f"Найден минимум в: {result}")
     print(f"Значение функции: {f_val:.6f}")
