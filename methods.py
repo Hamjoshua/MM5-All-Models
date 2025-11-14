@@ -26,11 +26,11 @@ class AbstractMethod:
         return lambda x: f(*x)
 
 
-class DichotomyMethod:
+class DichotomyMethod(AbstractMethod):
     def __init__(self):
         self.name = "Метод дихотомии"
     
-    def minimize(self, func, a, b, epsilon=1e-6, delta=1e-6, max_iter=1000):
+    def do(self, func_str="", a=0, b=1, epsilon=1e-6, delta=1e-6, max_iter=1000):
         """
         func - минимизируемая функция одной переменной
         a, b - начальный интервал поиска минимума
@@ -41,12 +41,14 @@ class DichotomyMethod:
         Возвращает точку минимума на отрезке [a,b].
         """
         
+        func = self.safe_parse_function(func_str=func_str, n_vars=1) # для функции 
+
         k = 0
         while (b - a) / 2.0 > delta and k < max_iter:
             y = (a + b - epsilon) / 2.0
             z = (a + b + epsilon) / 2.0
-            f_y = func(y)
-            f_z = func(z)
+            f_y = func([y])
+            f_z = func([z])
             
             if f_y <= f_z:
                 b = z
@@ -56,7 +58,7 @@ class DichotomyMethod:
             k += 1
         
         x_min = (a + b) / 2.0
-        return x_min
+        return x_min, func([x_min])
 
 
 class GradientDescentMethod(AbstractMethod):
