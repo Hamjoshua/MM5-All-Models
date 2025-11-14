@@ -61,6 +61,53 @@ class DichotomyMethod(AbstractMethod):
         return x_min, func([x_min])
 
 
+class HalfDivisionMethod(AbstractMethod):
+    def __init__(self):
+        self.name = "Метод деления пополам"
+
+    def do(self, func_str="", a=0, b=1, delta=1e-6, max_iter=100):
+        """
+        func - минимизируемая функция одной переменной
+        a, b - начальный интервал поиска минимума
+        epsilon - малое число для проверки разницы значений
+        delta - точность по длине интервала
+        max_iter - максимальное число итераций
+
+        Возвращает точку минимума на отрезке [a,b].
+        """
+        
+        func = self.safe_parse_function(func_str=func_str, n_vars=1) # для функции 
+
+        k = 0
+        while (b - a) > delta and k < max_iter:
+            x_mid = (a + b) / 2.0
+            L = b - a
+            y = a + L / 4.0
+            z = b - L / 4.0
+
+            f_mid = func([x_mid])
+            f_y = func([y])
+            f_z = func([z])
+
+            if f_y < f_mid:
+                b = x_mid
+                x_mid = y  # Новая средняя точка
+            else:
+                if f_z < f_mid:
+                    a = x_mid
+                    b = b
+                    x_mid = z  # Новая средняя точка
+                else:
+                    a = y
+                    b = z
+                    # x_mid сохраняется
+
+            k += 1
+
+        x_mid = (a + b) / 2.0
+        return x_mid, func([x_mid])
+
+
 class GradientDescentMethod(AbstractMethod):
     def __init__(self):
         super().__init__()

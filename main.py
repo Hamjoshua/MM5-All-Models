@@ -6,7 +6,7 @@ if __name__ == "__main__":
 
     # launcher.launch()
     
-    method = DichotomyMethod()
+    method = HalfDivisionMethod()
     func = "x1**3-2*x1-5"
     a, b = -2, 3
     result, f_val = method.do(func_str=func, a=a, b=b)
