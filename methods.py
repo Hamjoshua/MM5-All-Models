@@ -1,6 +1,7 @@
 from sympy import symbols, sympify
 from sympy.utilities.lambdify import lambdify
 from scipy.linalg import LinAlgError
+from scipy.optimize import minimize_scalar
 import numpy as np
 
 class AbstractMethod:
@@ -25,6 +26,34 @@ class AbstractMethod:
         expr = self.get_expr(func_str)
         f = lambdify(vars, expr, modules='numpy')
         return lambda x: f(*x)
+    
+    # В AbstractMethod
+    def _numerical_gradient(self, func, x, h=1e-8):
+        n = len(x)
+        grad = np.zeros(n)
+        for i in range(n):
+            x1, x2 = x.copy(), x.copy()
+            x1[i] -= h
+            x2[i] += h
+            grad[i] = (func(x2) - func(x1)) / (2 * h)
+        return grad
+
+    def _numerical_hessian(self, func, x, h=1e-5):
+        n = len(x)
+        hess = np.zeros((n, n))
+        for i in range(n):
+            for j in range(n):
+                if i == j:
+                    xp = x.copy(); xp[i] += h
+                    xm = x.copy(); xm[i] -= h
+                    hess[i, j] = (func(xp) - 2 * func(x) + func(xm)) / (h ** 2)
+                else:
+                    xpp = x.copy(); xpp[i] += h; xpp[j] += h
+                    xpm = x.copy(); xpm[i] += h; xpm[j] -= h
+                    xmp = x.copy(); xmp[i] -= h; xmp[j] += h
+                    xmm = x.copy(); xmm[i] -= h; xmm[j] -= h
+                    hess[i, j] = (func(xpp) - func(xpm) - func(xmp) + func(xmm)) / (4 * h ** 2)
+        return hess
 
 
 class DichotomyMethod(AbstractMethod):
@@ -61,6 +90,76 @@ class DichotomyMethod(AbstractMethod):
         x_min = (a + b) / 2.0
         return x_min, func([x_min])
     
+
+class NewtonRaphsonMethod(AbstractMethod):
+    def __init__(self):
+        self.name = "Метод Ньютона-Рафсона"
+
+    def do(self, func_str="", x0=None, epsilon1=1e-6, epsilon2=1e-6, max_iter=1000):
+        """
+        func_str      - строковое представление функции от n переменных
+        x0            - начальное приближение (список)
+        epsilon1      - точность по норме градиента
+        epsilon2      = точность по изменению x и f(x)
+        max_iter      - максимальное число итераций
+
+        Возвращает: (x*, f(x*))
+        """
+        if x0 is None:
+            x0 = [0.0]
+
+        func = self.safe_parse_function(func_str=func_str, n_vars=len(x0))
+        x = np.array(x0, dtype=float)
+        k = 0
+
+        while k < max_iter:
+            # Шаг 3: градиент
+            try:
+                grad = self._numerical_gradient(func, x)
+            except Exception as e:
+                raise RuntimeError(f"Ошибка градиента: {e}")
+
+            # Шаг 4: критерий остановки по градиенту
+            if np.linalg.norm(grad, ord=2) <= epsilon1:
+                return x.copy(), func(x)
+
+            # Шаг 5: проверка лимита итераций
+            if k >= max_iter:
+                break
+
+            # Шаг 6–7: гессиан и его обратная матрица
+            try:
+                hess = self._numerical_hessian(func, x)
+                hess_inv = np.linalg.inv(hess)
+                d = -hess_inv @ grad  # Шаг 8: всегда используем направление Ньютона
+            except np.linalg.LinAlgError:
+                # Если гессиан вырожден — выходим с ошибкой или fallback (но по алгоритму — не должно быть fallback'а!)
+                # Однако в реальности лучше не падать, а использовать регуляризацию или прекратить
+                raise RuntimeError("Гессиан вырожден: метод Ньютона-Рафсона не применим в этой точке.")
+
+            # Шаг 10: линейный поиск t_k = argmin_{t >= 0} f(x + t * d)
+            def phi(t):
+                return func(x + t * d)
+
+            try:
+                res = minimize_scalar(phi, bracket=(0, 1), method='brent')
+                t_opt = res.x if res.success else 1.0
+            except Exception:
+                t_opt = 1.0  # fallback, но это нарушает алгоритм
+
+            x_new = x + t_opt * d
+            f_curr = func(x)
+            f_new = func(x_new)
+
+            # Шаг 12: критерий остановки по x и f(x)
+            if np.linalg.norm(x_new - x) <= epsilon2 and abs(f_new - f_curr) <= epsilon2:
+                return x_new.copy(), f_new
+
+            x = x_new
+            k += 1
+
+        return x.copy(), func(x)
+
 
 class NewtonMethod(AbstractMethod):
     def __init__(self):
@@ -142,50 +241,7 @@ class NewtonMethod(AbstractMethod):
             k += 1
 
         return x.copy(), func(x)
-
-    def _numerical_gradient(self, func, x, h=1e-8):
-        """Численный градиент функции func в точке x."""
-        n = len(x)
-        grad = np.zeros(n)
-        for i in range(n):
-            x1 = x.copy()
-            x2 = x.copy()
-            x1[i] -= h
-            x2[i] += h
-            grad[i] = (func(x2) - func(x1)) / (2 * h)
-        return grad
-
-    def _numerical_hessian(self, func, x, h=1e-5):
-        """Численный гессиан функции func в точке x."""
-        n = len(x)
-        hess = np.zeros((n, n))
-        for i in range(n):
-            for j in range(n):
-                if i == j:
-                    x_pp = x.copy()
-                    x_mm = x.copy()
-                    x_pm = x.copy()
-                    x_mp = x.copy()
-                    x_pp[i] += h
-                    x_mm[i] -= h
-                    hess[i, j] = (func(x_pp) - 2 * func(x) + func(x_mm)) / (h ** 2)
-                else:
-                    x_pp = x.copy()
-                    x_mm = x.copy()
-                    x_pm = x.copy()
-                    x_mp = x.copy()
-                    x_pp[i] += h
-                    x_pp[j] += h
-                    x_mm[i] -= h
-                    x_mm[j] -= h
-                    x_pm[i] += h
-                    x_pm[j] -= h
-                    x_mp[i] -= h
-                    x_mp[j] += h
-                    hess[i, j] = (func(x_pp) - func(x_pm) - func(x_mp) + func(x_mm)) / (4 * h ** 2)
-        return hess
-
-
+    
 
 class HalfDivisionMethod(AbstractMethod):
     def __init__(self):
