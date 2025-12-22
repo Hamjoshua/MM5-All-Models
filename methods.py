@@ -56,6 +56,72 @@ class AbstractMethod:
         return hess
 
 
+class SvenMethod(AbstractMethod):
+    def __init__(self):
+        self.name = "Метод Свенна"
+
+    def do(self, func_str="", x0=1.0, t=0.0, max_iter=1000):
+        """
+        func - минимизируемая функция одной переменной
+        x0 - начальная точка
+        t - начальный шаг > 0
+        max_iter - максимум итераций
+
+        Возвращает интервал [a0, b0], содержащий минимум функции.
+        """
+        k = 0
+
+        func = self.safe_parse_function(func_str=func_str, n_vars=1) # для функции 
+
+        f_x0 = func([x0])
+        f_left = func([x0 - t])
+        f_right = func([x0 + t])
+
+        # Проверка начального условия на унимодальность
+        if f_left >= f_x0 <= f_right:
+            return (x0 - t, x0 + t)
+
+        if f_left <= f_x0 >= f_right:
+            raise ValueError("Функция не унимодальна в данной области, попробуйте другую начальную точку x0")
+
+        # Определяем направление градиента
+        if f_left >= f_x0 >= f_right:
+            delta = t
+            a0 = x0
+            xk = x0 + t
+        elif f_left <= f_x0 <= f_right:
+            delta = -t
+            b0 = x0
+            xk = x0 - t
+        else:
+            raise ValueError("Невозможно определить направление шага")
+
+        while k < max_iter:
+            f_xk = func([xk])
+            xk_plus_1 = xk + (2 ** k) * delta
+            f_xk_plus_1 = func([xk_plus_1])
+
+            if f_xk_plus_1 < f_xk:
+                if delta > 0:
+                    a0 = xk
+                else:
+                    b0 = xk
+                xk = xk_plus_1
+                k += 1
+            else:
+                if delta > 0:
+                    b0 = xk_plus_1
+                else:
+                    a0 = xk_plus_1
+                return (a0, b0)
+
+        # Если максимальное число итераций достигнуто
+        if delta > 0:
+            return (a0, xk_plus_1)
+        else:
+            return (xk_plus_1, b0)
+
+
 class DichotomyMethod(AbstractMethod):
     def __init__(self):
         self.name = "Метод дихотомии"
